@@ -794,7 +794,7 @@ suite('AgentService (node dispatcher)', () => {
 
 			// Sanity: the subagent child session is announced.
 			assert.ok(
-				service.stateManager.getAllSessionSummaries().some(s => s.resource === childSessionUri),
+				service.stateManager.getOverlaySessionSummaries().some(s => s.resource === childSessionUri),
 				'subagent child session should be listed',
 			);
 
@@ -808,6 +808,50 @@ suite('AgentService (node dispatcher)', () => {
 					subagentSessions: [],
 					includesParent: true,
 				},
+			);
+		});
+
+		test('listSessions overlay excludes idle provisional sessions but keeps ones with an active turn (#321269)', async () => {
+			// A provisional agent whose `listSessions` never returns the
+			// provisional session (mirroring CLI/Claude, which don't persist a
+			// session until its first message). The agent service's overlay is
+			// then the only thing that could surface it.
+			class ProvisionalMockAgent extends MockAgent {
+				override async createSession(config?: import('../../common/agentService.js').IAgentCreateSessionConfig): Promise<import('../../common/agentService.js').IAgentCreateSessionResult> {
+					const result = await super.createSession(config);
+					return { ...result, provisional: true };
+				}
+				override async listSessions() {
+					return [];
+				}
+			}
+
+			const provisionalAgent = new ProvisionalMockAgent('copilot');
+			disposables.add(toDisposable(() => provisionalAgent.dispose()));
+			service.registerProvider(provisionalAgent);
+
+			const session = await service.createSession({ provider: 'copilot' });
+
+			// Idle provisional session (the new-session composer's eagerly
+			// created session, before its first message) must not leak in.
+			const idleListed = await service.listSessions();
+			assert.ok(
+				!idleListed.some(s => s.session.toString() === session.toString()),
+				'idle provisional session should not appear in listSessions',
+			);
+
+			// Once a turn is in flight (the first turn can start before
+			// materialization completes), the session must stay visible so
+			// renderer-side caches don't evict the in-flight session.
+			service.dispatchAction(
+				session.toString(),
+				{ type: ActionType.SessionTurnStarted, turnId: 'turn-1', message: { text: 'hello', origin: { kind: MessageKind.User } } },
+				'test-client', 1,
+			);
+			const activeListed = await service.listSessions();
+			assert.ok(
+				activeListed.some(s => s.session.toString() === session.toString()),
+				'provisional session with an active turn should appear in listSessions',
 			);
 		});
 

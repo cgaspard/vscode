@@ -380,6 +380,20 @@ jobs:
         env:
           DISPLAY: ":10"
 
+      # Run the Agents Window suite 20 times in a row, failing on the first
+      # failure, to guard against flakiness regressions (see #321269).
+      - name: 🧪 Run Agents Window smoke tests 20x (stability)
+        if: ${{ inputs.electron_tests }}
+        timeout-minutes: 60
+        run: |
+          for i in $(seq 1 20); do
+            echo "::group::Agents Window smoke run $i/20"
+            npm run smoketest-no-compile -- --tracing -g "Agents Window" || { echo "::error::Agents Window smoke tests failed on run $i/20"; exit 1; }
+            echo "::endgroup::"
+          done
+        env:
+          DISPLAY: ":10"
+
       - name: 🧪 Run smoke tests (Browser, Chromium)
         if: ${{ inputs.browser_tests }}
         timeout-minutes: 20

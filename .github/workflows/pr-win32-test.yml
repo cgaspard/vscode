@@ -240,6 +240,22 @@ jobs:
         shell: pwsh
         run: npm run smoketest-no-compile -- --tracing
 
+      # Run the Agents Window suite 20 times in a row, failing on the first
+      # failure, to guard against flakiness regressions (see #321269).
+      - name: 🧪 Run Agents Window smoke tests 20x (stability)
+        if: ${{ inputs.electron_tests }}
+        timeout-minutes: 60
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 20; $i++) {
+            Write-Host "=== Agents Window smoke run $i/20 ==="
+            npm run smoketest-no-compile -- --tracing -g "Agents Window"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Agents Window smoke tests failed on run $i/20"
+              exit 1
+            }
+          }
+
       - name: 🧪 Run smoke tests (Browser, Chromium)
         if: ${{ inputs.browser_tests }}
         timeout-minutes: 20

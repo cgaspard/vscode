@@ -123,6 +123,18 @@ steps:
       timeoutInMinutes: 20
       displayName: 🧪 Run smoke tests (Electron)
 
+  # Run the Agents Window suite 20 times in a row, failing on the first
+  # failure, to guard against flakiness regressions (see #321269).
+  - ${{ if eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true) }}:
+    - script: |
+        set -e
+        for i in $(seq 1 20); do
+          echo "=== Agents Window smoke run $i/20 ==="
+          npm run smoketest-no-compile -- --tracing -g "Agents Window" --build "$(agent.builddirectory)/VSCode-linux-$(VSCODE_ARCH)"
+        done
+      timeoutInMinutes: 60
+      displayName: 🧪 Run Agents Window smoke tests 20x (stability)
+
   - ${{ if eq(parameters.VSCODE_RUN_BROWSER_TESTS, true) }}:
     - script: npm run smoketest-no-compile -- --web --tracing --headless
       env:
